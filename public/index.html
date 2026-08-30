@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0d10">
+  <title>CardFolio — Collect smarter.</title>
+  <link rel="preconnect" href="https://images.pokemontcg.io">
+  <link rel="stylesheet" href="styles.css?v=20260829-2">
+</head>
+<body>
+  <div class="noise"></div>
+  <header class="topbar">
+    <a class="brand brand-logo" href="#" aria-label="CardFolio home"><img src="assets/cardfolio-logo.png" alt="CardFolio"></a>
+    <nav aria-label="Main navigation">
+      <button class="nav-link active" data-view="discover">Discover</button>
+      <button class="nav-link" data-view="sets">Sets</button>
+      <button class="nav-link" data-view="portfolio">Portfolio <span id="portfolioCount" class="count">0</span></button>
+    </nav>
+    <button class="icon-btn" id="themeButton" aria-label="Toggle theme">◐</button>
+  </header>
+
+  <main>
+    <section id="discoverView" class="view active">
+      <div class="hero">
+        <div class="eyebrow"><span></span> THE COLLECTOR'S EDGE</div>
+        <h1>Know the card.<br><em>Own the market.</em></h1>
+        <p>Live raw-card market data, population intelligence and collection tracking — built into one beautifully simple collector workspace.</p>
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input id="searchInput" type="search" placeholder="Search Pikachu, Charizard, 151..." autocomplete="off">
+          <button id="searchButton">Search cards <span>→</span></button>
+        </div>
+        <div class="quick-searches">Trending: <button>Charizard</button><button>Pikachu</button><button>Umbreon</button><button>Gengar</button></div>
+      </div>
+
+      <div class="ticker" aria-label="Market summary">
+        <div><small>MARKET PULSE</small><strong class="up">▲ 4.2%</strong><span>7D</span></div>
+        <div><small>CARDS INDEXED</small><strong id="cardsIndexed">—</strong><span>LIVE</span></div>
+        <div><small>SETS TRACKED</small><strong id="setsTracked">—</strong><span>ALL ERAS</span></div>
+        <div><small>PORTFOLIO VALUE (USD)</small><strong id="headerValue">$0.00</strong><span>YOUR CARDS</span></div>
+      </div>
+
+      <section class="content-section">
+        <div class="section-head"><div><span class="kicker">MARKET MOVERS</span><h2>Cards worth watching</h2></div><div class="filters price-filters"><label>PRICE <select id="priceFilter"><option value="all">All prices</option><option value="under10">Under $10</option><option value="10to50">$10–$50</option><option value="50to100">$50–$100</option><option value="over100">Over $100</option></select></label><label>SORT <select id="priceSort"><option value="default">Featured</option><option value="low">Price: low first</option><option value="high">Price: high first</option></select></label></div></div>
+        <div id="status" class="status">Loading live card data…</div>
+        <div id="cardGrid" class="card-grid"></div>
+        <button id="loadMore" class="load-more">Load more cards <span>↓</span></button>
+      </section>
+    </section>
+
+    <section id="setsView" class="view content-section page-view">
+      <div id="setBrowser">
+        <div class="section-head"><div><span class="kicker">THE ARCHIVE</span><h2>Explore every era</h2><p>Browse expansions from Base Set to today.</p></div></div>
+        <div id="setGrid" class="set-grid"></div>
+      </div>
+      <div id="setDetail" hidden>
+        <div id="setDetailHeader" class="active-set"></div>
+        <div class="set-sticky-tools">
+          <nav id="setCategoryNav" class="set-category-nav" aria-label="Card rarity pages"></nav>
+        </div>
+        <div id="setStatus" class="status"></div>
+        <div id="setCardGrid" class="card-grid"></div>
+      </div>
+    </section>
+
+    <section id="portfolioView" class="view content-section page-view">
+      <div class="portfolio-hero">
+        <div><span class="kicker">YOUR COLLECTION</span><h2>Portfolio overview</h2><p>Track cost basis, market value and the cards that matter.</p></div>
+        <button id="exportButton" class="outline-btn">Export CSV</button>
+      </div>
+      <div class="stat-grid">
+        <article><small>MARKET VALUE (USD)</small><strong id="totalValue">$0.00</strong><span id="valueMove">Live TCGplayer data</span></article>
+        <article><small>TOTAL INVESTED (USD)</small><strong id="totalCost">$0.00</strong><span>Your cost basis</span></article>
+        <article><small>UNREALIZED RETURN</small><strong id="totalReturn">$0.00</strong><span id="returnPercent">0.0%</span></article>
+        <article><small>CARDS OWNED</small><strong id="ownedCount">0</strong><span>Across your collection</span></article>
+      </div>
+      <div id="portfolioEmpty" class="empty"><div class="empty-ball">◒</div><h3>Your collection starts here.</h3><p>Add a card from Discover to begin tracking your portfolio.</p><button data-go-discover>Discover cards</button></div>
+      <div id="portfolioList" class="portfolio-list portfolio-card-grid"></div>
+    </section>
+  </main>
+
+  <dialog id="cardDialog">
+    <button class="dialog-close" aria-label="Close">×</button>
+    <div id="dialogContent"></div>
+  </dialog>
+  <div id="toast" class="toast"></div>
+  <footer><a class="brand brand-logo footer-logo"><img src="assets/cardfolio-logo.png" alt="CardFolio"></a><p>Live market intelligence for collectors. Not financial advice.</p><span>Raw prices via TCGplayer · USD</span></footer>
+  <script src="app.js?v=20260829-2"></script>
+</body>
+</html>
