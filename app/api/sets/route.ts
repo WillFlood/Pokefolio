@@ -1,0 +1,2 @@
+import {NextResponse} from "next/server";
+export async function GET(){try{const response=await fetch("https://api.pokemontcg.io/v2/sets?orderBy=-releaseDate&pageSize=250",{headers:process.env.POKEMONTCG_API_KEY?{"X-Api-Key":process.env.POKEMONTCG_API_KEY}:{},next:{revalidate:86400}});if(!response.ok)throw new Error();return NextResponse.json(await response.json(),{headers:{"Cache-Control":"public, s-maxage=86400, stale-while-revalidate=604800"}})}catch{return NextResponse.json({error:"Set provider unavailable"},{status:502})}}

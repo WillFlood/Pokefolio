@@ -1,0 +1,2 @@
+import {z} from "zod";
+export const portfolioEntrySchema=z.object({card_id:z.string().min(1).max(80),card_name:z.string().min(1).max(160),set_name:z.string().min(1).max(160),image_url:z.string().url().startsWith("https://images.pokemontcg.io/"),variant:z.string().min(1).max(60),variant_label:z.string().min(1).max(80),quantity:z.number().int().min(1).max(10000),purchase_price_cents:z.number().int().min(0).max(100000000),market_price_cents:z.number().int().min(0).max(100000000)});
