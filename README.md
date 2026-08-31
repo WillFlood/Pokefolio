@@ -1,6 +1,7 @@
 # PlayersLibrary
 
 Pokémon card discovery, set browsing, live raw-card pricing, and browser-local portfolio tracking.
+Going into MTG soon...
 
 ## Run locally
 
