@@ -111,7 +111,7 @@ function start(port) {
 
 server.on('listening', () => {
   const address = server.address();
-  console.log(`CardFolio running at http://localhost:${address.port}`);
+  console.log(`PlayersLibrary running at http://localhost:${address.port}`);
 });
 
 start(START_PORT);

@@ -1,16 +1,16 @@
-# CardFolio
+# PlayersLibrary
 
 Pokémon card discovery, set browsing, live raw-card pricing, and browser-local portfolio tracking.
 
 ## Run locally
 
-CardFolio requires Node.js 20 or newer and has no runtime package dependencies.
+PlayersLibrary requires Node.js 20 or newer and has no runtime package dependencies.
 
 ```powershell
 npm.cmd start
 ```
 
-Open `http://localhost:4173`. If that port is occupied, CardFolio automatically tries the next available port.
+Open `http://localhost:4173`. If that port is occupied, PlayersLibrary automatically tries the next available port.
 
 For automatic restarts while editing:
 

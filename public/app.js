@@ -10,9 +10,9 @@
 ].map(([id,name,set,rarity,image])=>({id,name,set:{name},rarity,images:{small:image.replace('_hires',''),large:image}}));
 const FALLBACK_SETS = [['sv8','Surging Sparks','2024/11/08',252],['sv3pt5','151','2023/09/22',207],['sv4pt5','Paldean Fates','2024/01/26',245],['swsh7','Evolving Skies','2021/08/27',237],['swsh8','Fusion Strike','2021/11/12',284],['swsh9','Brilliant Stars','2022/02/25',186]].map(([id,name,releaseDate,total])=>({id,name,releaseDate,total,images:{logo:`https://images.pokemontcg.io/${id}/logo.png`}}));
 
-const STORAGE_KEY='cardfolio';
-const savedPortfolio=JSON.parse(localStorage.getItem(STORAGE_KEY)||localStorage.getItem('pokefolio')||'[]').map(card=>card.priceSource?card:{...card,price:0});
-const state={cards:[],sets:[],page:1,query:'',priceFilter:'all',priceSort:'default',activeSet:null,setCards:[],setPage:1,setRarity:'all',portfolio:savedPortfolio,selected:null};
+const STORAGE_KEY='playerslibrary';
+const savedPortfolio=JSON.parse(localStorage.getItem(STORAGE_KEY)||localStorage.getItem('cardfolio')||localStorage.getItem('pokefolio')||'[]').map(card=>card.priceSource?card:{...card,price:0});
+const state={cards:[],sets:[],setQuery:'',page:1,query:'',searchIntent:null,priceFilter:'all',priceSort:'default',activeSet:null,setCards:[],setPage:1,setRarity:'all',portfolio:savedPortfolio,selected:null};
 const $=s=>document.querySelector(s); const $$=s=>[...document.querySelectorAll(s)];
 const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0);
 const PRICE_LABELS={normal:'Normal',holofoil:'Holofoil',reverseHolofoil:'Reverse holofoil','1stEditionNormal':'1st Edition normal','1stEditionHolofoil':'1st Edition holofoil',unlimited:'Unlimited',unlimitedHolofoil:'Unlimited holofoil'};
@@ -75,6 +75,39 @@ const getPrice=c=>getPriceEntries(c)[0]?.market||0;
 const rawEstimate=c=>{const age=Math.max(1,new Date().getFullYear()-Number(c.set?.releaseDate?.slice(0,4)||2024)+1);const rarityFactor=/rare|promo/i.test(c.rarity||'')?0.22:1;return Math.round((1800000/age)*rarityFactor/1000)*1000};
 async function fetchVerifiedJson(url,attempts=3){let error;for(let attempt=0;attempt<attempts;attempt++){try{const response=await fetch(url,{cache:'no-store'});if(response.ok)return await response.json();error=new Error(`HTTP ${response.status}`)}catch(e){error=e}await new Promise(resolve=>setTimeout(resolve,350*(attempt+1)))}throw error}
 
+const normalizeSearch=value=>value.toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+function resolveSearchIntent(input){
+  const normalized=normalizeSearch(input);
+  if(!normalized)return {cardQuery:'',set:null,rarity:null,label:'all cards'};
+  const aliases=[['base set 2','base4'],['base set','base1'],['pokemon 151','sv3pt5'],['scarlet and violet 151','sv3pt5']];
+  let matchedPhrase='',set=null;
+  for(const [phrase,id] of aliases){if(` ${normalized} `.includes(` ${phrase} `)){matchedPhrase=phrase;set=state.sets.find(item=>item.id===id);break}}
+  if(!set){const match=state.sets.map(item=>({item,phrase:normalizeSearch(item.name)})).filter(x=>x.phrase).sort((a,b)=>b.phrase.length-a.phrase.length).find(x=>` ${normalized} `.includes(` ${x.phrase} `));if(match){set=match.item;matchedPhrase=match.phrase}}
+  let remaining=matchedPhrase?normalizeSearch(` ${normalized} `.replace(` ${matchedPhrase} `,' ')):normalized;
+  const rarityAliases=[
+    ['special illustration rare','Special Illustration Rare'],
+    ['illustration rare','Illustration Rare'],
+    ['ultra rare','Ultra Rare'],
+    ['double rare','Double Rare'],
+    ['hyper rare','Hyper Rare'],
+    ['rare holo','Rare Holo'],
+    ['holo rare','Rare Holo'],
+    ['sir','Special Illustration Rare'],
+    ['ir','Illustration Rare'],
+    ['ur','Ultra Rare'],
+    ['dr','Double Rare'],
+    ['hr','Hyper Rare']
+  ];
+  let rarity=null,rarityPhrase='';
+  for(const [phrase,value] of rarityAliases){if(` ${remaining} `.includes(` ${phrase} `)){rarity=value;rarityPhrase=phrase;break}}
+  if(rarityPhrase)remaining=normalizeSearch(` ${remaining} `.replace(` ${rarityPhrase} `,' '));
+  const cardQuery=remaining.trim();
+  const label=[cardQuery,rarity,set?`in ${set.name}`:''].filter(Boolean).join(' ');
+  return {cardQuery,set,rarity,label:label||'all cards'};
+}
+function showCardLoading(){$('#cardGrid').innerHTML=Array.from({length:8},()=>'<article class="card-skeleton" aria-hidden="true"><div class="skeleton-image"></div><div class="skeleton-line wide"></div><div class="skeleton-line"></div></article>').join('')}
+function setSearchLoading(loading){const button=$('#searchButton');button.disabled=loading;button.classList.toggle('is-loading',loading);button.innerHTML=loading?'<span class="search-spinner"></span> Searching…':'Search cards <span>→</span>'}
+
 function guideVariant(row){
   const special=(row.name.match(/\((Energy Symbol Pattern|Friend Ball|Quick Ball|Dusk Ball|Love Ball|Pok[eé] Ball)\)/i)||[])[1];
   const base=/reverse/i.test(row.printing)?'reverseHolofoil':/holo/i.test(row.printing)?'holofoil':'normal';
@@ -106,14 +139,46 @@ async function loadLivePriceGuides(){await Promise.all([
 async function loadCards(reset=false){
   if(reset){state.page=1;state.cards=[];$('#loadMore').hidden=false} $('#status').textContent='Loading live card data…';
   try{const terms=[];if(state.query)terms.push(`name:"${state.query}*"`);const ranges={under10:'[0.01 TO 10}','10to50':'[10 TO 50]','50to100':'[50 TO 100]',over100:'[100 TO *]'};if(ranges[state.priceFilter])terms.push(`tcgplayer.prices.holofoil.market:${ranges[state.priceFilter]}`);const q=terms.length?`&q=${encodeURIComponent(terms.join(' '))}`:'';const order=state.priceSort==='low'?'tcgplayer.prices.holofoil.market':state.priceSort==='high'?'-tcgplayer.prices.holofoil.market':'-set.releaseDate';const r=await fetch(`/api/tcg/cards?page=${state.page}&pageSize=24&orderBy=${encodeURIComponent(order)}${q}`);if(!r.ok)throw 0;const j=await r.json();state.cards.push(...j.data);j.data.forEach(card=>{const owned=state.portfolio.filter(item=>item.id===card.id),prices=getPriceEntries(card);owned.forEach(item=>{const live=prices.find(p=>p.variant===item.variant)?.market||(!item.variant?getPrice(card):0);if(live){item.price=live;item.priceSource='TCGplayer'}})});if(state.portfolio.length)localStorage.setItem(STORAGE_KEY,JSON.stringify(state.portfolio));renderPortfolio();$('#cardsIndexed').textContent=(j.totalCount||'19K+').toLocaleString();$('#status').textContent=`Showing ${state.cards.length} of ${(j.totalCount||0).toLocaleString()} cards${state.priceFilter!=='all'?' in this TCGplayer holofoil price range':''} · USD`;$('#loadMore').hidden=state.cards.length>=j.totalCount;}
-  catch{state.cards=[];$('#cardsIndexed').textContent='—';$('#status').textContent='Verified pricing could not be loaded. No sample or predicted prices are being shown.';$('#cardGrid').innerHTML='<div class="empty"><h3>Live pricing unavailable</h3><p>CardFolio could not reach the TCGplayer-backed catalogue after three attempts.</p><button id="retryPrices">Retry verified prices</button></div>';$('#loadMore').hidden=true;$('#retryPrices').onclick=()=>loadCards(true);return;}
+  catch{if(state.cards.length){$('#status').textContent=`Could not load the next page. ${state.cards.length} cards are still shown — try again.`;$('#loadMore').hidden=false;return}state.cards=[];$('#cardsIndexed').textContent='—';$('#status').textContent='Verified pricing could not be loaded. No sample or predicted prices are being shown.';$('#cardGrid').innerHTML='<div class="empty"><h3>Live pricing unavailable</h3><p>PlayersLibrary could not reach the TCGplayer-backed catalogue after three attempts.</p><button id="retryPrices">Retry verified prices</button></div>';$('#loadMore').hidden=true;$('#retryPrices').onclick=()=>loadCards(true);return;}
   renderCards();state.page++;
 }
-async function loadSets(){try{const r=await fetch('/api/tcg/sets?orderBy=-releaseDate&pageSize=250');if(!r.ok)throw 0;const j=await r.json();state.sets=j.data;$('#setsTracked').textContent=j.totalCount.toLocaleString()}catch{state.sets=FALLBACK_SETS;$('#setsTracked').textContent='170+'}renderSets()}
+async function loadSmartCards(reset=false){
+  if(reset){state.page=1;state.cards=[];$('#loadMore').hidden=false;showCardLoading();setSearchLoading(true)}
+  const intent=state.searchIntent||resolveSearchIntent(state.query);state.searchIntent=intent;
+  $('#status').textContent=`Searching for ${intent.label||'all cards'}…`;
+  try{
+    const terms=[];
+    if(intent.set)terms.push(`set.id:${intent.set.id}`);
+    if(intent.rarity)terms.push(`rarity:"${intent.rarity}"`);
+    if(intent.cardQuery)normalizeSearch(intent.cardQuery).split(' ').filter(Boolean).forEach(word=>terms.push(`name:${word}*`));
+    const ranges={under10:'[0.01 TO 10]','10to50':'[10 TO 50]','50to100':'[50 TO 100]',over100:'[100 TO *]'};
+    if(ranges[state.priceFilter])terms.push(`tcgplayer.prices.holofoil.market:${ranges[state.priceFilter]}`);
+    const q=terms.length?`&q=${encodeURIComponent(terms.join(' '))}`:'';
+    const order=intent.set?'number':state.priceSort==='low'?'tcgplayer.prices.holofoil.market':state.priceSort==='high'?'-tcgplayer.prices.holofoil.market':'-set.releaseDate';
+    const response=await fetch(`/api/tcg/cards?page=${state.page}&pageSize=24&orderBy=${encodeURIComponent(order)}${q}`);
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    const result=await response.json();state.cards.push(...result.data);
+    $('#cardsIndexed').textContent=(result.totalCount||0).toLocaleString();
+    const context=intent.set?` in ${intent.set.name}`:'';
+    $('#status').textContent=`Showing ${state.cards.length} of ${(result.totalCount||0).toLocaleString()} matching cards${context} · USD`;
+    $('#loadMore').hidden=state.cards.length>=result.totalCount;renderCards();state.page++;
+  }catch{
+    if(state.cards.length){$('#status').textContent=`Could not load the next page. ${state.cards.length} matching cards are still shown — try again.`;$('#loadMore').hidden=false;return}
+    state.cards=[];$('#cardsIndexed').textContent='—';$('#status').textContent='Search unavailable. Please try again.';
+    $('#cardGrid').innerHTML='<div class="empty"><h3>Search temporarily unavailable</h3><p>PlayersLibrary could not reach the card catalogue.</p><button id="retryPrices">Retry search</button></div>';
+    $('#loadMore').hidden=true;$('#retryPrices').onclick=()=>loadSmartCards(true);
+  }finally{if(reset)setSearchLoading(false)}
+}
+async function loadSets(){
+  let catalogue=null;
+  try{catalogue=(await fetchVerifiedJson('/data/sets.json',2)).data}catch{try{catalogue=JSON.parse(localStorage.getItem('playerslibrary-sets')||'null')?.data}catch{}}
+  state.sets=catalogue?.length?catalogue:FALLBACK_SETS;$('#setsTracked').textContent=state.sets.length.toLocaleString();renderSets();
+  try{const live=await fetchVerifiedJson('/api/tcg/sets?orderBy=-releaseDate&pageSize=250',3);if(live.data?.length<100)throw new Error('Incomplete set catalogue');state.sets=live.data;localStorage.setItem('playerslibrary-sets',JSON.stringify({data:state.sets,savedAt:Date.now()}));$('#setsTracked').textContent=state.sets.length.toLocaleString();renderSets()}catch{}
+}
 function cardMarkup(c,i){const prices=getPriceEntries(c);return `<article class="card-tile" data-card="${c.id}" style="animation-delay:${i%8*40}ms"><div class="card-image"><img src="${c.images?.small}" alt="${c.name}" loading="lazy"><span class="badge">${c.rarity||'POKÉMON'}</span></div><div class="card-info"><h3>${c.name}</h3><div class="card-meta"><span>${c.set?.name||'Unknown set'}</span><span class="card-price">${prices.length?`${prices.length>1?'From ':''}${money(prices[0].market)}`:'Coming Soon!'}</span></div></div></article>`}
 function bindCards(container,cards){container.querySelectorAll('[data-card]').forEach(x=>x.onclick=()=>openCard(cards.find(c=>c.id===x.dataset.card)))}
 function renderCards(){const cards=[...state.cards];$('#cardGrid').innerHTML=cards.map(cardMarkup).join('');bindCards($('#cardGrid'),cards);if(!cards.length)$('#cardGrid').innerHTML='<div class="empty"><h3>No matching priced cards</h3><p>Try another price range.</p></div>'}
-function renderSets(){$('#setGrid').innerHTML=state.sets.map(s=>`<article class="set-tile" data-set="${s.id}"><div><span>${s.releaseDate?.slice(0,4)||'—'}</span><h3>${s.name}</h3><p>${s.total||'—'} cards</p></div><img src="${s.images?.logo}" alt="${s.name} logo" loading="lazy"></article>`).join('');$$('[data-set]').forEach(x=>x.onclick=()=>openSet(state.sets.find(s=>s.id===x.dataset.set)))}
+function renderSets(){const query=normalizeSearch(state.setQuery),sets=query?state.sets.filter(set=>normalizeSearch(`${set.name} ${set.series||''} ${set.releaseDate||''}`).includes(query)):state.sets;$('#setSearchStatus').textContent=query?`${sets.length} of ${state.sets.length} sets match “${state.setQuery}”`:`All ${state.sets.length} sets · newest to oldest`;$('#setGrid').innerHTML=sets.length?sets.map(s=>`<article class="set-tile" data-set="${s.id}"><div><span>${s.releaseDate?.slice(0,4)||'—'}</span><h3>${s.name}</h3><p>${s.total||'—'} cards</p></div><img src="${s.images?.logo}" alt="${s.name} logo" loading="lazy"></article>`).join(''):'<div class="empty"><h3>No matching sets</h3><p>Try a shorter set name or another era.</p></div>';$$('[data-set]').forEach(x=>x.onclick=()=>openSet(state.sets.find(s=>s.id===x.dataset.set)))}
 function openSet(set){state.activeSet=set;state.setCards=[];state.setRarity='Common';$('#setBrowser').hidden=true;$('#setDetail').hidden=false;$('.set-sticky-tools').classList.remove('scroll-hidden');$('#setDetailHeader').innerHTML=`<img src="${set.images?.logo}" alt="${set.name} logo"><div><small>SET CATALOGUE</small><strong>${set.name}</strong><span>${set.total||'—'} cards · Released ${set.releaseDate||'—'}</span></div>`;loadSetCards()}
 function clearSet(){state.activeSet=null;state.setCards=[];$('.set-sticky-tools').classList.remove('scroll-hidden');$('#setDetail').hidden=true;$('#setBrowser').hidden=false;scrollTo(0,0)}
 async function loadSetCards(){
@@ -130,7 +195,7 @@ function openCard(c){
   const prices=getPriceEntries(c),price=getPrice(c),raw=rawEstimate(c);
   const priceRows=prices.length?prices.map(p=>`<div class="variant-price"><span>${p.label}</span><strong>${money(p.market)}</strong><small>Near Mint market${p.low?` · Low ${money(p.low)}`:''}${p.mid?` · Mid ${money(p.mid)}`:''} · ${p.source}</small></div>`).join(''):'<div class="variant-price"><span>TCGplayer pricing</span><strong>Awaiting TCGplayer pricing</strong><small>No verified market listing available</small></div>';
   const variantOptions=prices.length?prices.map(p=>`<option value="${p.variant}" data-price="${p.market}">${p.label} · ${money(p.market)}</option>`).join(''):'<option value="unpriced" data-price="0">Unpriced raw card</option>';
-  $('#dialogContent').innerHTML=`<div class="detail"><div class="detail-art"><img src="${c.images?.large||c.images?.small}" alt="${c.name}"></div><div class="detail-body"><span class="kicker">${c.rarity||'TRADING CARD'}</span><h2>${c.name}</h2><div class="detail-sub">${c.set?.name||''} · #${c.number||c.id.split('-').pop()}</div><div class="price-variants"><small class="price-heading">CURRENT RAW PRICES (USD)</small>${priceRows}</div><div class="detail-stats raw-stats"><div><small>EST. RAW SUPPLY <button class="estimate-help" aria-label="How is estimated raw supply calculated?">?</button><span class="estimate-tooltip" role="tooltip">Formula: 1,800,000 baseline cards ÷ years since release × rarity factor. Rare or promo cards use a 22% rarity factor; other cards use 100%. The result is rounded to the nearest 1,000. This is directional only—not an official print run or population report.</span></small><strong>~${raw.toLocaleString()}</strong></div><div><small>PRICE SOURCE</small><strong>${prices.length?'TCGplayer':'Unavailable'}</strong></div></div><p class="estimate-note">Normal, holofoil, reverse holofoil, first-edition and unlimited values are shown whenever TCGplayer supplies them. These are live raw market values—not CardFolio predictions.</p><div class="purchase raw-purchase"><label>Card variant<select id="portfolioVariant">${variantOptions}</select></label><label>Price paid (USD)<input id="paidPrice" type="number" min="0" step="0.01" value="${price?price.toFixed(2):''}" placeholder="0.00"></label><label>Quantity<input id="quantity" type="number" min="1" value="1"></label><button class="add-btn" id="addCard">Add to portfolio</button></div></div></div>`;
+  $('#dialogContent').innerHTML=`<div class="detail"><div class="detail-art"><img src="${c.images?.large||c.images?.small}" alt="${c.name}"></div><div class="detail-body"><span class="kicker">${c.rarity||'TRADING CARD'}</span><h2>${c.name}</h2><div class="detail-sub">${c.set?.name||''} · #${c.number||c.id.split('-').pop()}</div><div class="price-variants"><small class="price-heading">CURRENT RAW PRICES (USD)</small>${priceRows}</div><div class="detail-stats raw-stats"><div><small>EST. RAW SUPPLY <button class="estimate-help" aria-label="How is estimated raw supply calculated?">?</button><span class="estimate-tooltip" role="tooltip">Formula: 1,800,000 baseline cards ÷ years since release × rarity factor. Rare or promo cards use a 22% rarity factor; other cards use 100%. The result is rounded to the nearest 1,000. This is directional only—not an official print run or population report.</span></small><strong>~${raw.toLocaleString()}</strong></div><div><small>PRICE SOURCE</small><strong>${prices.length?'TCGplayer':'Unavailable'}</strong></div></div><p class="estimate-note">Normal, holofoil, reverse holofoil, first-edition and unlimited values are shown whenever TCGplayer supplies them. These are live raw market values—not PlayersLibrary predictions.</p><div class="purchase raw-purchase"><label>Card variant<select id="portfolioVariant">${variantOptions}</select></label><label>Price paid (USD)<input id="paidPrice" type="number" min="0" step="0.01" value="${price?price.toFixed(2):''}" placeholder="0.00"></label><label>Quantity<input id="quantity" type="number" min="1" value="1"></label><button class="add-btn" id="addCard">Add to portfolio</button></div></div></div>`;
   $('#portfolioVariant').onchange=e=>{const option=e.target.selectedOptions[0];if(!$('#paidPrice').value||Number($('#paidPrice').value)===price)$('#paidPrice').value=Number(option.dataset.price).toFixed(2)};
   $('#addCard').onclick=()=>addPortfolio(c);
   $('#cardDialog').showModal();
@@ -144,8 +209,34 @@ function toast(text){$('#toast').textContent=text;$('#toast').classList.add('sho
 $$('.nav-link').forEach(b=>b.onclick=()=>showView(b.dataset.view));$$('.quick-searches button').forEach(b=>b.onclick=()=>{$('#searchInput').value=b.textContent;state.query=b.textContent;loadCards(true)});$('#searchButton').onclick=()=>{state.query=$('#searchInput').value.trim();loadCards(true)};$('#searchInput').onkeydown=e=>{if(e.key==='Enter')$('#searchButton').click()};$('#loadMore').onclick=()=>loadCards();$('.dialog-close').onclick=()=>$('#cardDialog').close();$('#cardDialog').onclick=e=>{if(e.target===$('#cardDialog'))$('#cardDialog').close()};$('[data-go-discover]').onclick=()=>showView('discover');$('#themeButton').onclick=()=>document.body.classList.toggle('light');
 $('#priceFilter').onchange=e=>{state.priceFilter=e.target.value;loadCards(true)};
 $('#priceSort').onchange=e=>{state.priceSort=e.target.value;loadCards(true)};
+async function performSearch(value){if(!state.sets.length)await loadSets();state.query=value.trim();state.searchIntent=resolveSearchIntent(state.query);loadSmartCards(true)}
+$$('.quick-searches button').forEach(button=>button.onclick=()=>{$('#searchInput').value=button.textContent;performSearch(button.textContent)});
+$('#searchButton').onclick=()=>performSearch($('#searchInput').value);
+$('#searchInput').onkeydown=event=>{if(event.key==='Enter')performSearch(event.currentTarget.value)};
+let discoverPageLoading=false;
+$('#loadMore').onclick=async()=>{
+  if(discoverPageLoading)return;
+  const button=$('#loadMore'),original=button.innerHTML;
+  discoverPageLoading=true;button.disabled=true;button.innerHTML='<span class="search-spinner"></span> Loading cards…';
+  state.page=Math.floor(state.cards.length/24)+1;
+  try{await (state.searchIntent?loadSmartCards():loadCards())}
+  finally{discoverPageLoading=false;button.disabled=false;button.innerHTML=original}
+};
+$('#priceFilter').onchange=event=>{state.priceFilter=event.target.value;state.searchIntent=resolveSearchIntent(state.query);loadSmartCards(true)};
+$('#priceSort').onchange=event=>{state.priceSort=event.target.value;state.searchIntent=resolveSearchIntent(state.query);loadSmartCards(true)};
+$('#setSearchInput').oninput=event=>{state.setQuery=event.target.value;renderSets()};
 let lastScrollPosition=window.scrollY;
 window.addEventListener('scroll',()=>{const controls=$('.set-sticky-tools'),current=window.scrollY;if(!controls||!state.activeSet){lastScrollPosition=current;return}if(current<120||current<lastScrollPosition-6)controls.classList.remove('scroll-hidden');else if(current>lastScrollPosition+6)controls.classList.add('scroll-hidden');lastScrollPosition=current},{passive:true});
-$('#exportButton').onclick=()=>{if(!state.portfolio.length)return toast('Add a card before exporting');const rows=['Card,Set,Quantity,Price Paid,Market Price',...state.portfolio.map(c=>[c.name,c.set,c.qty,c.paid,c.price].map(x=>`"${x}"`).join(','))];const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));a.download='cardfolio-portfolio.csv';a.click();URL.revokeObjectURL(a.href)};
-async function startApp(){await loadLivePriceGuides();renderPortfolio();loadCards();loadSets();refreshPortfolioPrices()}
+$('#exportButton').onclick=()=>{if(!state.portfolio.length)return toast('Add a card before exporting');const rows=['Card,Set,Quantity,Price Paid,Market Price',...state.portfolio.map(c=>[c.name,c.set,c.qty,c.paid,c.price].map(x=>`"${x}"`).join(','))];const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));a.download='playerslibrary-portfolio.csv';a.click();URL.revokeObjectURL(a.href)};
+function startApp(){
+  renderPortfolio();
+  loadCards();
+  loadSets();
+  refreshPortfolioPrices();
+  loadLivePriceGuides().then(()=>{
+    renderCards();
+    if(state.activeSet&&state.setCards.length)renderSetCategory();
+    refreshPortfolioPrices();
+  });
+}
 startApp();

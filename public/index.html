@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0b0d10">
-  <title>CardFolio — Collect smarter.</title>
+  <title>PlayersLibrary — Collect smarter.</title>
   <link rel="preconnect" href="https://images.pokemontcg.io">
-  <link rel="stylesheet" href="styles.css?v=20260829-2">
+  <link rel="stylesheet" href="styles.css?v=20260831-pl-watermark">
 </head>
 <body>
   <div class="noise"></div>
   <header class="topbar">
-    <a class="brand brand-logo" href="#" aria-label="CardFolio home"><img src="assets/cardfolio-logo.png" alt="CardFolio"></a>
+    <a class="brand brand-logo" href="#" aria-label="PlayersLibrary home"><img src="assets/playerslibrary-logo.png" alt=""><span class="brand-word">PLAYERSLIBRARY</span></a>
     <nav aria-label="Main navigation">
       <button class="nav-link active" data-view="discover">Discover</button>
       <button class="nav-link" data-view="sets">Sets</button>
@@ -28,7 +28,7 @@
         <p>Live raw-card market data, population intelligence and collection tracking — built into one beautifully simple collector workspace.</p>
         <div class="search-wrap">
           <span class="search-icon">⌕</span>
-          <input id="searchInput" type="search" placeholder="Search Pikachu, Charizard, 151..." autocomplete="off">
+          <input id="searchInput" type="search" placeholder="Search Pikachu, Base Set, IR, SIR..." autocomplete="off">
           <button id="searchButton">Search cards <span>→</span></button>
         </div>
         <div class="quick-searches">Trending: <button>Charizard</button><button>Pikachu</button><button>Umbreon</button><button>Gengar</button></div>
@@ -51,7 +51,8 @@
 
     <section id="setsView" class="view content-section page-view">
       <div id="setBrowser">
-        <div class="section-head"><div><span class="kicker">THE ARCHIVE</span><h2>Explore every era</h2><p>Browse expansions from Base Set to today.</p></div></div>
+        <div class="section-head"><div><span class="kicker">THE ARCHIVE</span><h2>Explore every era</h2><p>Browse expansions from Base Set to today.</p></div><label class="set-search-wrap"><span>SEARCH SETS</span><input id="setSearchInput" type="search" placeholder="Search Base Set, 151, Surging Sparks…" autocomplete="off"></label></div>
+        <div id="setSearchStatus" class="status"></div>
         <div id="setGrid" class="set-grid"></div>
       </div>
       <div id="setDetail" hidden>
@@ -85,7 +86,7 @@
     <div id="dialogContent"></div>
   </dialog>
   <div id="toast" class="toast"></div>
-  <footer><a class="brand brand-logo footer-logo"><img src="assets/cardfolio-logo.png" alt="CardFolio"></a><p>Live market intelligence for collectors. Not financial advice.</p><span>Raw prices via TCGplayer · USD</span></footer>
-  <script src="app.js?v=20260829-2"></script>
+  <footer><a class="brand brand-logo footer-logo"><img src="assets/playerslibrary-logo.png" alt=""><span class="brand-word">PLAYERSLIBRARY</span></a><p>Live market intelligence for collectors. Not financial advice.</p><span>Raw prices via TCGplayer · USD</span></footer>
+  <script src="app.js?v=20260831-pagination"></script>
 </body>
 </html>
